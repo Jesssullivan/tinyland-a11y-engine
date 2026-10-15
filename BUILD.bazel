@@ -1,17 +1,42 @@
-load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+"""
+BUILD.bazel for @tummycrypt/tinyland-a11y-engine.
+
+Bazel is the build and distribution authority (RU6, RU8).
+  Build: bazel build //:pkg
+  Test:  bazel test //...
+  Consumers: bazel_dep(name = "tummycrypt_tinyland_a11y_engine", version = "1.0.0")
+             from xoxd-ai/bazel-registry, linked with
+             npm_link_package(name = "node_modules/@tummycrypt/tinyland-a11y-engine",
+                              src = "@tummycrypt_tinyland_a11y_engine//:pkg",
+                              deps = {<color-utils store>: "@tummycrypt/tinyland-color-utils"}).
+             README.md has the full recipe.
+             The package is not published to npm.
+"""
+
 load("@aspect_rules_js//npm:defs.bzl", "npm_link_package", "npm_package")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
 load("@tummycrypt_tinyland_a11y_engine_npm//:defs.bzl", "npm_link_all_packages")
 load("@tummycrypt_tinyland_a11y_engine_npm//:vitest/package_json.bzl", vitest_bin = "bin")
 
 npm_link_all_packages(name = "node_modules")
 
 # First-party dep resolved through the Bazel module graph (not npm).
-# tinyland-color-utils is linked from its published module's :pkg target;
-# it is removed from package.json so npm_link_all_packages does not also link it.
+# tinyland-color-utils is linked from its registry module's :pkg target, and it
+# is absent from package.json so npm_link_all_packages does not also link it.
 npm_link_package(
     name = "node_modules/@tummycrypt/tinyland-color-utils",
     src = "@tummycrypt_tinyland_color_utils//:pkg",
 )
+
+# Build-time deps: the optional peers (svelte, axe-core), @types/node and the
+# in-house color-utils module.
+BUILD_DEPS = [
+    ":node_modules",
+    ":node_modules/@types/node",
+    ":node_modules/svelte",
+    ":node_modules/axe-core",
+    ":node_modules/@tummycrypt/tinyland-color-utils",
+]
 
 ts_project(
     name = "tinyland_a11y_engine",
@@ -21,48 +46,64 @@ ts_project(
             "src/**/*.test.ts",
             "src/**/*.spec.ts",
         ],
-    ),
+    ) + ["package.json"],
     declaration = True,
     declaration_map = True,
     source_map = False,
-    resolve_json_module = True,
     tsconfig = ":tsconfig.json",
     transpiler = "tsc",
     out_dir = "dist",
     root_dir = "src",
     validate = False,
-    deps = [
-        ":node_modules",
-        ":node_modules/@types/node",
-        ":node_modules/svelte",
-        ":node_modules/axe-core",
-        ":node_modules/@tummycrypt/tinyland-color-utils",
-    ],
+    deps = BUILD_DEPS,
     visibility = ["//visibility:public"],
+)
+
+# The compiled files only. A filegroup forwards files and drops the
+# ts_project's JsInfo, so `//:pkg` carries no npm_package_store_infos: neither
+# the build-time peers (svelte, axe-core) from this module's own lock nor the
+# color-utils link. The consuming app supplies all three from its own root
+# package (RU9; U1 Bazel finding N1). A store link carried across Bazel repos
+# becomes a relative symlink into `external/<repo>`, which exists in the output
+# tree but not in a consumer's runfiles under Bazel 8, so the consumer links
+# color-utils itself and passes it to this package as `deps` (README.md).
+filegroup(
+    name = "dist_js",
+    srcs = [":tinyland_a11y_engine"],
+)
+
+filegroup(
+    name = "dist_types",
+    srcs = [":tinyland_a11y_engine"],
+    output_group = "types",
 )
 
 npm_package(
     name = "pkg",
     srcs = [
-        "package.json",
-        "README.md",
+        "CHANGELOG.md",
         "LICENSE",
-        ":tinyland_a11y_engine",
+        "README.md",
+        "package.json",
+        ":dist_js",
+        ":dist_types",
     ],
+    # Ship the compiled files and docs only, never runfiles (node_modules).
+    include_runfiles = False,
     package = "@tummycrypt/tinyland-a11y-engine",
-    version = "0.3.0",
+    version = "1.0.0",
     visibility = ["//visibility:public"],
 )
 
 vitest_bin.vitest_test(
     name = "test",
     data = [
-        ":node_modules",
+        "package.json",
         "tsconfig.json",
-        ":node_modules/vitest",
-        ":node_modules/@tummycrypt/tinyland-color-utils",
         "vitest.config.ts",
-    ] + glob(["src/**/*.ts"]) + glob(["tests/**/*.test.ts", "tests/**/*.ts"]),
+        ":node_modules/vitest",
+        ":node_modules/happy-dom",
+    ] + BUILD_DEPS + glob(["src/**/*.ts"]) + glob(["tests/**/*.ts"]),
     args = [
         "run",
         "--reporter=verbose",
@@ -75,19 +116,13 @@ vitest_bin.vitest_test(
 
 ts_project(
     name = "typecheck",
-    srcs = glob(["src/**/*.ts"]),
+    srcs = glob(["src/**/*.ts"]) + ["package.json"],
     declaration = False,
     no_emit = True,
     tsconfig = ":tsconfig.json",
     transpiler = "tsc",
     validate = False,
-    deps = [
-        ":node_modules",
-        ":node_modules/@types/node",
-        ":node_modules/svelte",
-        ":node_modules/axe-core",
-        ":node_modules/@tummycrypt/tinyland-color-utils",
-    ],
+    deps = BUILD_DEPS,
     visibility = ["//visibility:public"],
 )
 
