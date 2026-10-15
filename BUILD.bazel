@@ -7,11 +7,12 @@ Bazel is the build and distribution authority (RU6, RU8).
   Consumers: bazel_dep(name = "tummycrypt_tinyland_a11y_engine", version = "1.0.0")
              from xoxd-ai/bazel-registry, linked with
              npm_link_package(name = "node_modules/@tummycrypt/tinyland-a11y-engine",
-                              src = "@tummycrypt_tinyland_a11y_engine//:pkg").
+                              src = "@tummycrypt_tinyland_a11y_engine//:pkg",
+                              deps = {<color-utils store>: "@tummycrypt/tinyland-color-utils"}).
+             README.md has the full recipe.
              The package is not published to npm.
 """
 
-load("@aspect_rules_js//js:defs.bzl", "js_library")
 load("@aspect_rules_js//npm:defs.bzl", "npm_link_package", "npm_package")
 load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
 load("@tummycrypt_tinyland_a11y_engine_npm//:defs.bzl", "npm_link_all_packages")
@@ -59,9 +60,13 @@ ts_project(
 )
 
 # The compiled files only. A filegroup forwards files and drops the
-# ts_project's JsInfo, so the build-time peers (svelte, axe-core) from this
-# module's own lock are never linked into consumers; Node resolves them from
-# the consuming app's single pnpm lock (RU9; U1 Bazel finding N1).
+# ts_project's JsInfo, so `//:pkg` carries no npm_package_store_infos: neither
+# the build-time peers (svelte, axe-core) from this module's own lock nor the
+# color-utils link. The consuming app supplies all three from its own root
+# package (RU9; U1 Bazel finding N1). A store link carried across Bazel repos
+# becomes a relative symlink into `external/<repo>`, which exists in the output
+# tree but not in a consumer's runfiles under Bazel 8, so the consumer links
+# color-utils itself and passes it to this package as `deps` (README.md).
 filegroup(
     name = "dist_js",
     srcs = [":tinyland_a11y_engine"],
@@ -73,18 +78,6 @@ filegroup(
     output_group = "types",
 )
 
-# The one runtime dependency, color-utils (re-exported by ./color), travels
-# with the package: js_library propagates its npm_package_store_info, so a
-# consumer's npm_link_package links it next to this package.
-js_library(
-    name = "dist",
-    srcs = [
-        ":dist_js",
-        ":dist_types",
-    ],
-    deps = [":node_modules/@tummycrypt/tinyland-color-utils"],
-)
-
 npm_package(
     name = "pkg",
     srcs = [
@@ -92,7 +85,8 @@ npm_package(
         "LICENSE",
         "README.md",
         "package.json",
-        ":dist",
+        ":dist_js",
+        ":dist_types",
     ],
     # Ship the compiled files and docs only, never runfiles (node_modules).
     include_runfiles = False,

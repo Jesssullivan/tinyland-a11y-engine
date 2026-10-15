@@ -18,9 +18,9 @@ contract and the distribution channel.
   Bazel module graph at 1.0.0 (`tummycrypt_tinyland_color_utils`), up from
   0.2.3.
 - Bazel: aspect_rules_ts 3.10.1 with the TypeScript 7.0.2 extension, Node
-  22.22.0. `//:pkg` ships only `dist/` plus docs and carries the color-utils
-  link, but never this module's own copies of `svelte` or `axe-core`; the
-  consuming app's lock supplies them.
+  22.22.0. `//:pkg` ships only `dist/` plus docs and carries no npm links:
+  not this module's own copies of `svelte` or `axe-core`, and not
+  color-utils. The consuming app links all three from its own root package.
 - Distribution: Bazel-only (RU6, RU8). The npm publish workflow, `publishConfig`
   and `prepublishOnly` are removed and the package is `private`. Releases are a
   signed git tag, a GitHub release and an entry in xoxd-ai/bazel-registry.
@@ -38,9 +38,15 @@ contract and the distribution channel.
 
 1. Replace any npm dependency on `@tummycrypt/tinyland-a11y-engine` with
    `bazel_dep(name = "tummycrypt_tinyland_a11y_engine", version = "1.0.0")`
-   from `https://raw.githubusercontent.com/xoxd-ai/bazel-registry/main`, and
-   link it with
-   `npm_link_package(name = "node_modules/@tummycrypt/tinyland-a11y-engine", src = "@tummycrypt_tinyland_a11y_engine//:pkg")`.
+   from `https://raw.githubusercontent.com/xoxd-ai/bazel-registry/main`, plus
+   `bazel_dep(name = "tummycrypt_tinyland_color_utils", version = "1.0.0")`.
+   In your root package, link color-utils with
+   `npm_link_package(name = "node_modules/@tummycrypt/tinyland-color-utils", src = "@tummycrypt_tinyland_color_utils//:pkg")`
+   and this package with
+   `npm_link_package(name = "node_modules/@tummycrypt/tinyland-a11y-engine", src = "@tummycrypt_tinyland_a11y_engine//:pkg", deps = {":.aspect_rules_js/node_modules/@tummycrypt/tinyland-color-utils": "@tummycrypt/tinyland-color-utils"})`
+   (README.md). Without the `deps` entry, the root entry, `./validators`
+   and `./color` fail to resolve color-utils inside `bazel test` and `bazel run`
+   runfiles.
 2. Your own lock must provide `svelte` 5.57.2 whenever you import the root
    entry (`.`), which re-exports the Svelte preprocessor (`svelte/compiler`)
    and action, and `axe-core` 4.x when you use `./browser`. Apps still on an
