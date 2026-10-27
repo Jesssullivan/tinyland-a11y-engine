@@ -50,9 +50,11 @@ bazel build //:pkg               # local, non-qualifying
 bazel test //...                 # local, non-qualifying: vitest suite and the tsc 7 typecheck
 ```
 
-CI (`.github/workflows/ci.yml`, `bazel_targets: "//:pkg //:test"`) is the
-qualifying gate. A local run is a non-qualifying check, and `.bazelrc` sets
-`startup --max_idle_secs=120`, so its Bazel server exits after 120 s idle.
+CI (`.github/workflows/ci.yml`, `bazel_targets: "//:pkg //:test"`) builds
+`//:pkg` and `//:test`. It does not run the vitest suite or build
+`//:typecheck`, so this repo has no qualifying test gate yet. A local run is
+a non-qualifying check, and `.bazelrc` sets `startup --max_idle_secs=120`,
+so its Bazel server exits after 120 s idle.
 
 `@tummycrypt/tinyland-color-utils` resolves only through Bazel, so the
 type check and tests run under Bazel rather than plain `pnpm`.
